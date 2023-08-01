@@ -58,6 +58,10 @@ public interface CharInputReader extends CharInput {
 	 */
 	char getChar();
 
+	String currentLine();
+
+	String previousLine();
+
 	/**
 	 * Returns the number of characters returned by {@link CharInputReader#nextChar()} at any given time.
 	 *
@@ -166,7 +170,7 @@ public interface CharInputReader extends CharInput {
 	 *
 	 * @return {@code true} if an entire {@code String} value was found on the input and skipped, or {@code false} if the buffer needs to reloaded.
 	 */
-	boolean skipString(char ch, char stop);
+	String skipString(char ch, char stop);
 
 	/**
 	 * Attempts to collect a quoted {@code String} from the current position until a closing quote or stop character is found on the input,

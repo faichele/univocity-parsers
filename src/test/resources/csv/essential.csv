@@ -1,5 +1,17 @@
+essential.csv Key_1:Value_1 2 3
+essential.csv Key_2:Value_2
+Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line Very long line
+asdf
+essential.csv Key 3:Value as string
+
+essential.csv Key 4:4.55
 This line and the following should be skipped. The third is ignored automatically because it is blank
 
+
+essential.csv Key_5:Value as string
+essential.csv Key_6:4.56
+# comment 0
+# comment 1
 
 Year,Make,Model,Description,Price
 1997,Ford,E350,"ac, abs, moon",3000.00

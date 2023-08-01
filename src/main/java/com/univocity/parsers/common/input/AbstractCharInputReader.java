@@ -58,6 +58,8 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 
 	private char ch;
 
+	private String currentLine = new String();
+	private String previousLine = new String();
 	/**
 	 * The buffer itself
 	 */
@@ -276,12 +278,44 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 
 		ch = buffer[i++];
 
+		if (ch == lineSeparator1)  {
+			currentLine = "";
+
+			/*int bufferPos = i;
+			while (bufferPos >= 0) {
+				Character curCh = buffer[bufferPos];
+				currentLine += curCh;
+				bufferPos--;
+				if (curCh == lineSeparator1 || curCh == '\0') {
+					break;
+				}
+			}
+			System.out.println("Line " + lineCount + " read in AbstractCharInputReader (backwards): " + currentLine);*/
+			int bufferPos = i;
+			while (bufferPos < buffer.length) {
+				Character curCh = buffer[bufferPos];
+				currentLine += curCh;
+				bufferPos++;
+				if (curCh == lineSeparator1 || curCh == '\0') {
+					break;
+				}
+			}
+			previousLine = currentLine;
+			System.out.println("Line " + lineCount + " read in AbstractCharInputReader: " + previousLine);
+
+			currentLine = "";
+		} /*else {
+			currentLine += ch;
+		}*/
+
 		if (i >= length) {
 			updateBuffer();
 		}
 
 		if (lineSeparator1 == ch && (lineSeparator2 == '\0' || length != -1 && lineSeparator2 == buffer[i])) {
+			//System.out.println("buffer: \"" + String.valueOf(buffer) + "\"");
 			lineCount++;
+
 			if (normalizeLineEndings) {
 				ch = normalizedLineSeparator;
 				if (lineSeparator2 == '\0') {
@@ -297,12 +331,24 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 			}
 		}
 
+		// System.out.println("CHAR: " + ch);
+
 		return ch;
 	}
 
 	@Override
 	public final char getChar() {
 		return ch;
+	}
+
+	@Override
+	public String currentLine() {
+		return currentLine;
+	}
+
+	@Override
+	public String previousLine() {
+		return previousLine;
 	}
 
 	@Override
@@ -379,9 +425,19 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 
 	@Override
 	public final char skipWhitespace(char ch, char stopChar1, char stopChar2) {
+		// String skippedText = new String();
 		while (ch <= ' ' && ch != stopChar1 && ch != normalizedLineSeparator && ch != stopChar2 && whitespaceRangeStart < ch) {
 			ch = nextChar();
+			// skippedText += ch;
 		}
+
+		/*if (ch == normalizedLineSeparator) {
+			System.out.println("Line " + lineCount + " read in AbstractCharInputReader: " + currentLine);
+			previousLine = currentLine;
+			currentLine = "";
+		}*/
+
+		// System.out.println("AbstractCharInputReader skipWhiteSpace() skippedText: " + skippedText);
 		return ch;
 	}
 
@@ -433,16 +489,30 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 	}
 
 	@Override
-	public final boolean skipString(char ch, char stop) {
+	public final String skipString(char ch, char stop) {
+		String ret = new String("");
+		// System.out.println("skipString i 1: " + i);
 		if (i == 0) {
-			return false;
+			return ret;
 		}
 		int i = this.i;
+		// System.out.println("skipString i 2: " + i);
+		if (i > 0) {
+			ret += buffer[i - 1];
+		}
+		//ret += buffer[i];
+
 		for (; ch != stop; ch = buffer[i++]) {
+			ret += buffer[i];
 			if (i >= length) {
-				return false;
+				return ret;
 			}
+			// System.out.println("skipString skipping pos " + i + " ch = " + ch);
 			if (lineSeparator1 == ch && (lineSeparator2 == '\0' || lineSeparator2 == buffer[i])) {
+				// System.out.println("Line end for line " + lineCount + " reached in skipString.");
+				//previousLine = currentLine;
+				//currentLine = "";
+
 				break;
 			}
 		}
@@ -450,8 +520,10 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 		this.i = i - 1;
 
 		nextChar();
+		ret += buffer[this.i];
 
-		return true;
+		// System.out.println("Return value for skipString in line " + lineCount + ": " + ret);
+		return ret;
 	}
 
 	@Override
@@ -465,6 +537,10 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 				return null;
 			}
 			if (lineSeparator1 == ch && (lineSeparator2 == '\0' || lineSeparator2 == buffer[i])) {
+				/*System.out.println("Line " + lineCount + " read in AbstractCharInputReader: " + currentLine);
+				previousLine = currentLine;
+				currentLine = "";*/
+
 				break;
 			}
 		}
@@ -534,6 +610,10 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 					}
 				}
 			} else if (lineSeparator1 == ch && normalizeLineEndings && (lineSeparator2 == '\0' || i + 1 < length && lineSeparator2 == buffer[i + 1])) {
+				/*System.out.println("Line " + lineCount + " read in AbstractCharInputReader: " + currentLine);
+				previousLine = currentLine;
+				currentLine = "";*/
+
 				return null;
 			}
 			i++;
@@ -603,6 +683,10 @@ public abstract class AbstractCharInputReader implements CharInputReader {
 
 				return false;
 			} else if (lineSeparator1 == ch && normalizeLineEndings && (lineSeparator2 == '\0' || i + 1 < length && lineSeparator2 == buffer[i + 1])) {
+				/*System.out.println("Line " + lineCount + " read in AbstractCharInputReader: " + currentLine);
+				previousLine = currentLine;
+				currentLine = "";*/
+
 				return false;
 			}
 			i++;

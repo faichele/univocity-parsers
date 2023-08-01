@@ -97,6 +97,16 @@ public class DefaultParsingContext extends DefaultContext implements ParsingCont
 	}
 
 	@Override
+	public Map<Long, String> preambleLines() {
+		return parser.getPreambleLines();
+	}
+
+	@Override
+	public String lastPreambleLine() {
+		return parser.getLastPreambleLine();
+	}
+
+	@Override
 	public String[] parsedHeaders() {
 		return parser.getParsedHeaders();
 	}

@@ -133,9 +133,9 @@ public class FixedWidthParser extends AbstractParser<FixedWidthParserSettings> {
 	}
 
 	@Override
-	protected void parseRecord() {
+	protected ParseRecordResult parseRecord() {
 		if (ch == newLine && skipEmptyLines) {
-			return;
+			return ParseRecordResult.STOP_PARSING;
 		}
 
 		boolean matched = false;
@@ -230,7 +230,7 @@ public class FixedWidthParser extends AbstractParser<FixedWidthParserSettings> {
 				if (ch == newLine) {
 					output.valueParsed();
 					useDefaultPadding = false;
-					return;
+					return ParseRecordResult.STOP_PARSING;
 				}
 			} else if (length > 0) {
 				readValue(ignorePadding);
@@ -250,6 +250,7 @@ public class FixedWidthParser extends AbstractParser<FixedWidthParserSettings> {
 		}
 		useDefaultPadding = false;
 
+		return ParseRecordResult.CONTINUE_PARSING;
 	}
 
 	private void skipToNewLine() {

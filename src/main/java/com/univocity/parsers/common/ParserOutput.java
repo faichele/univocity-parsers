@@ -183,6 +183,7 @@ public class ParserOutput {
 	 * @return the sequence of parsed values in a record.
 	 */
 	public String[] rowParsed() {
+		// System.out.println("rowParsed(): pendingRecords.size() = " + pendingRecords.size());
 		if (!pendingRecords.isEmpty()) {
 			return pendingRecords.poll();
 		}

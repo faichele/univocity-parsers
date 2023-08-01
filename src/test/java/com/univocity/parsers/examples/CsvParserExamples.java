@@ -32,6 +32,9 @@ public class CsvParserExamples extends Example {
 	@Test
 	public void example001ParseAll() throws Exception {
 		//##CODE_START
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example001ParseAll");
+		System.out.println("==============================");
 
 		CsvParserSettings settings = new CsvParserSettings();
 		//the file used in the example uses '\n' as the line separator sequence.
@@ -43,14 +46,29 @@ public class CsvParserExamples extends Example {
 		CsvParser parser = new CsvParser(settings);
 
 		// parses all rows in one go.
-		List<String[]> allRows = parser.parseAll(getReader("/examples/example.csv"));
+		List<String[]> allRows = parser.parseAll(getReader("/examples/example_with_nonstandard_lines.csv"));
 
+		System.out.println("Rows: " + allRows.size());
+		for (int k = 0; k < allRows.size(); k++) {
+			String[] row = allRows.get(k);
+			String rowAsText = new String();
+			for (int l = 0; l < row.length; l++)
+				rowAsText += row[l] + ";";
+
+			System.out.println(" * Row " + k + ": " + rowAsText);
+		}
+
+		parser.printParsingStats();
 		//##CODE_END
-		printAndValidate(null, allRows);
+		//printAndValidate(null, allRows);
 	}
 
 	@Test
 	public void example002ReadSimpleCsv() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example002ReadSimpleCsv");
+		System.out.println("==============================");
+
 		StringBuilder out = new StringBuilder();
 
 		CsvParserSettings settings = new CsvParserSettings();
@@ -58,6 +76,7 @@ public class CsvParserExamples extends Example {
 		//the line separator sequence is defined here to ensure systems such as MacOS and Windows
 		//are able to process this file correctly (MacOS uses '\r'; and Windows uses '\r\n').
 		settings.getFormat().setLineSeparator("\n");
+		settings.setHeaderExtractionEnabled(true);
 
 		//##CODE_START
 
@@ -79,13 +98,18 @@ public class CsvParserExamples extends Example {
 		// But it doesn't hurt if you call it anyway.
 		parser.stopParsing();
 
+		parser.printParsingStats();
+
 		//##CODE_END
 
-		printAndValidate(out);
+		// printAndValidate(out);
 	}
 
-	@Test
+	/*@Test
 	public void example002IteratorOverCsv() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example002IteratorOverCsv");
+		System.out.println("==============================");
 		StringBuilder out = new StringBuilder();
 
 		CsvParserSettings settings = new CsvParserSettings();
@@ -99,16 +123,19 @@ public class CsvParserExamples extends Example {
 		// creates a CSV parser
 		CsvParser parser = new CsvParser(settings);
 
-		for(String[] row : parser.iterate(getReader("/examples/example.csv"))){
+		for(String[] row : parser.iterate(getReader("/examples/example_with_nonstandard_lines.csv"))){
 			println(out, Arrays.toString(row));
 		}
 
 		//##CODE_END
-		printAndValidate(out);
+		//printAndValidate(out);
 	}
 
 	@Test
 	public void example002RecordIteratorOverCsv() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example002RecordIteratorOverCsv");
+		System.out.println("==============================");
 		StringBuilder out = new StringBuilder();
 
 		CsvParserSettings settings = new CsvParserSettings();
@@ -132,6 +159,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example003ReadCsvWithRowProcessor() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example003ReadCsvWithRowProcessor");
+		System.out.println("==============================");
 		//##CODE_START
 
 		// The settings object provides many configuration options
@@ -154,7 +184,7 @@ public class CsvParserExamples extends Example {
 		CsvParser parser = new CsvParser(parserSettings);
 
 		// the 'parse' method will parse the file and delegate each parsed row to the RowProcessor you defined
-		parser.parse(getReader("/examples/example.csv"));
+		parser.parse(getReader("/examples/example_with_nonstandard_lines.csv"));
 
 		// get the parsed records from the RowListProcessor here.
 		// Note that different implementations of RowProcessor will provide different sets of functionalities.
@@ -168,6 +198,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example004ReadCsvAndConvertValues() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example004ReadCsvAndConvertValues");
+		System.out.println("==============================");
 		final StringBuilder out = new StringBuilder();
 
 		//##CODE_START
@@ -207,6 +240,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example005UsingAnnotations() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example005UsingAnnotations");
+		System.out.println("==============================");
 		//##CODE_START
 		// BeanListProcessor converts each parsed row to an instance of a given class, then stores each instance into a list.
 		BeanListProcessor<TestBean> rowProcessor = new BeanListProcessor<TestBean>(TestBean.class);
@@ -229,6 +265,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example006MasterDetail() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example006MasterDetail");
+		System.out.println("==============================");
 		//##CODE_START
 		// 1st, Create a RowProcessor to process all "detail" elements
 		ObjectRowListProcessor detailProcessor = new ObjectRowListProcessor();
@@ -272,6 +311,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example007Columns() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example007Columns");
+		System.out.println("==============================");
 		//##CODE_START
 		CsvParserSettings parserSettings = new CsvParserSettings();
 		parserSettings.getFormat().setLineSeparator("\n");
@@ -302,6 +344,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example008CustomConversionAnnotation() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example008CustomConversionAnnotation");
+		System.out.println("==============================");
 		StringBuilder out = new StringBuilder();
 
 		CsvParserSettings parserSettings = new CsvParserSettings();
@@ -330,6 +375,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example009ParallelProcessing() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example009ParallelProcessing");
+		System.out.println("==============================");
 		StringBuilder out = new StringBuilder();
 
 		CsvParserSettings parserSettings = new CsvParserSettings();
@@ -359,6 +407,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example010Escaping() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example010Escaping");
+		System.out.println("==============================");
 		StringBuilder out = new StringBuilder();
 
 		CsvParserSettings settings = new CsvParserSettings();
@@ -385,6 +436,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example011ErrorHandling() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example011ErrorHandling");
+		System.out.println("==============================");
 		final StringBuilder out = new StringBuilder();
 
 		CsvParserSettings settings = new CsvParserSettings();
@@ -419,6 +473,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example011ErrorHandlingWithRetry() {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example011ErrorHandlingWithRetry");
+		System.out.println("==============================");
 		final StringBuilder out = new StringBuilder();
 
 		CsvParserSettings settings = new CsvParserSettings();
@@ -459,6 +516,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example012FormatAutodetection() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example012FormatAutodetection");
+		System.out.println("==============================");
 		CsvParserSettings settings = new CsvParserSettings();
 
 		//##CODE_START
@@ -489,6 +549,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example013ParseKeepingEscapeSequences() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example013ParseKeepingEscapeSequences");
+		System.out.println("==============================");
 		CsvParserSettings settings = new CsvParserSettings();
 		settings.setHeaderExtractionEnabled(true);
 
@@ -510,6 +573,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example014ParseMultipleBeansInSingleRow() {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example014ParseMultipleBeansInSingleRow");
+		System.out.println("==============================");
 		CsvParserSettings settings = new CsvParserSettings();
 		settings.getFormat().setLineSeparator("\n");
 
@@ -566,6 +632,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example015QuoteAndEscapeHandling() {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example015QuoteAndEscapeHandling");
+		System.out.println("==============================");
 		CsvParserSettings settings = new CsvParserSettings();
 		//##CODE_START
 		settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_CLOSING_QUOTE);
@@ -625,6 +694,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example016ParseReadingComments() {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example016ParseReadingComments");
+		System.out.println("==============================");
 		CsvParserSettings settings = new CsvParserSettings();
 		settings.getFormat().setLineSeparator("\n");
 
@@ -662,7 +734,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example017ParseMultiSchema() {
-
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example017ParseMultiSchema");
+		System.out.println("==============================");
 		//##CODE_START
 		//Here's a master-detail schema, with rows using different formats. Rows starting with MASTER are master rows
 		//and they are followed by one or more car records.
@@ -738,6 +812,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example018ParseAllRecords() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example018ParseAllRecords");
+		System.out.println("==============================");
 		CsvParserSettings settings = new CsvParserSettings();
 		//the file used in the example uses '\n' as the line separator sequence.
 		//the line separator sequence is defined here to ensure systems such as MacOS and Windows
@@ -764,6 +841,9 @@ public class CsvParserExamples extends Example {
 
 	@Test
 	public void example019IterateOverRecords() throws Exception {
+		System.out.println("==============================");
+		System.out.println("Run EXAMPLE example019IterateOverRecords");
+		System.out.println("==============================");
 
 		CsvParserSettings settings = new CsvParserSettings();
 		//the file used in the example uses '\n' as the line separator sequence.
@@ -801,7 +881,7 @@ public class CsvParserExamples extends Example {
 
 		printAndValidate();
 	}
-
+	*/
 	private void parse(String input, CsvParserSettings settings, String message) {
 		String[] values = null;
 

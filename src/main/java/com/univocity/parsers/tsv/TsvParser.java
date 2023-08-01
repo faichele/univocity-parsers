@@ -58,7 +58,7 @@ public class TsvParser extends AbstractParser<TsvParserSettings> {
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected void parseRecord() {
+	protected ParseRecordResult parseRecord() {
 		if (ignoreLeadingWhitespace && ch != '\t' && ch <= ' ' && whitespaceRangeStart < ch) {
 			ch = input.skipWhitespace(ch, '\t', escapeChar);
 		}
@@ -72,6 +72,8 @@ public class TsvParser extends AbstractParser<TsvParserSettings> {
 				}
 			}
 		}
+
+		return ParseRecordResult.CONTINUE_PARSING;
 	}
 
 	private void parseField() {

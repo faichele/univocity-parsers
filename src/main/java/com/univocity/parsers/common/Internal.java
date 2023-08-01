@@ -29,6 +29,7 @@ class Internal {
 		try {
 			processor.rowProcessed(row, context);
 		} catch (DataProcessingException ex) {
+			System.out.println("Internal BailOut line 32, ex: " + ex.toString());
 			ex.setContext(context);
 
 			if (!ex.isFatal() && !ex.isHandled() && ex.getColumnIndex() > -1 && errorHandler instanceof RetryableErrorHandler) {

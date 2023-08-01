@@ -15,6 +15,7 @@
  ******************************************************************************/
 package com.univocity.parsers.common;
 
+import com.sun.tools.javac.util.StringUtils;
 import com.univocity.parsers.common.input.EOFException;
 import com.univocity.parsers.common.input.*;
 import com.univocity.parsers.common.iterators.*;
@@ -61,11 +62,20 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 	protected Processor processor;
 	protected CharInputReader input;
 	protected char ch;
+
+	protected ArrayList<Character> currentLine;
 	private final ProcessorErrorHandler errorHandler;
 	private final long rowsToSkip;
 	protected final Map<Long, String> comments;
 	protected String lastComment;
+
+	protected final Map<Long, String> preambleLines;
+	protected String lastPreambleLine;
+	private final boolean collectPreambleLines;
+
 	private final boolean collectComments;
+
+	private final boolean processPreambleLines;
 	private final boolean collectEmptyComments;
 	private final int errorContentLength;
 	private boolean extractingHeaders = false;
@@ -101,15 +111,27 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 		this.extractHeaders = settings.isHeaderExtractionEnabled();
 		this.whitespaceRangeStart = settings.getWhitespaceRangeStart();
 		this.processComments = settings.isCommentProcessingEnabled();
+
+		this.collectPreambleLines = settings.isCommentCollectionEnabled();
+		this.preambleLines = collectPreambleLines ? new TreeMap<Long, String>() : Collections.<Long, String>emptyMap();
+		this.processPreambleLines = settings.isPreambleLineCollectionEnabled();
+		this.currentLine = new ArrayList<Character>();
 	}
 
 	protected void processComment() {
-		if (collectComments) {
+		if (collectComments || collectPreambleLines) {
 			long line = input.lineCount();
 			String comment = input.readComment();
-			if (comment != null || collectEmptyComments) {
-				lastComment = comment;
-				comments.put(line, lastComment);
+			if (collectComments) {
+				if (comment != null || collectEmptyComments) {
+					lastComment = comment;
+					comments.put(line, lastComment);
+				}
+			}
+			if (collectPreambleLines && !headerLinesFound()) {
+				lastPreambleLine = comment;
+				System.out.println("Adding comment as preambleLine: Line " + line + " -- " + lastPreambleLine);
+				preambleLines.put(line, lastPreambleLine);
 			}
 		} else {
 			try {
@@ -132,6 +154,7 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 			while (!context.isStopped()) {
 				input.markRecordStart();
 				ch = input.nextChar();
+
 				if (processComments && inComment()) {
 					processComment();
 					continue;
@@ -143,6 +166,31 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 
 				String[] row = output.rowParsed();
 				if (row != null) {
+					/*for (int k = 0; k < row.length; k++) {
+						if (row[k] != null) {
+							for (int l = 0; l < row[k].length(); l++) {
+								currentLine.add(row[k].charAt(l));
+							}
+						}
+					}*/
+
+					/*StringBuilder sb = new StringBuilder();
+					for (String rowElem: row) {
+						if (rowElem != null) {
+							for (int l = 0; l < rowElem.length(); l++) {
+								currentLine.add(rowElem.charAt(l));
+							}
+						}
+						sb.append(rowElem + ",");
+					}*/
+
+					/*for (Character ch : currentLine) {
+						sb.append(ch);
+					}*/
+
+					//System.out.println("Row read from input (AbstractParser.java, line 180), " +
+					//		row.length + " elements: " + sb.toString());
+
 					if (recordsToRead >= 0 && context.currentRecord() >= recordsToRead) {
 						context.stop();
 						if (recordsToRead == 0) {
@@ -199,7 +247,14 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 	 * @see com.univocity.parsers.common.TextParsingException
 	 * @see com.univocity.parsers.common.processor.RowProcessor
 	 */
-	protected abstract void parseRecord();
+
+	public enum ParseRecordResult {
+		RECORD_PARSED,
+		CONTINUE_PARSING,
+		STOP_PARSING
+	}
+
+	protected abstract ParseRecordResult parseRecord();
 
 	/**
 	 * Allows the parser implementation to handle any value that was being consumed when the end of the input was reached
@@ -558,10 +613,16 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 	}
 
 	protected boolean inComment() {
+
 		return ch == comment;
 	}
 
+	protected boolean headerLinesFound() {
+		if (output.parsedHeaders == null)
+			return false;
 
+		return output.parsedHeaders.length > 0;
+	}
 	/**
 	 * Parses the next record from the input. Note that {@link AbstractParser#beginParsing(Reader)} must have been invoked once before calling this method.
 	 * If the end of the input is reached, then this method will return null. Additionally, all resources will be closed automatically at the end of the input
@@ -575,15 +636,58 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 			while (!context.isStopped()) {
 				input.markRecordStart();
 				ch = input.nextChar();
+
+				//currentLine.add(ch);
+
+				String prevLine = input.previousLine();
+				long curLine = input.lineCount();
+				boolean headersFound = headerLinesFound();
+				// System.out.println("AbstractParser line " + curLine + ": " + prevLine);
+
 				if (processComments && inComment()) {
 					processComment();
+					// System.out.println("Bail out at comment in line " + curLine);
 					continue;
 				}
+
 				if (output.pendingRecords.isEmpty()) {
-					parseRecord();
+					ParseRecordResult recordParsed = parseRecord();
+					if (recordParsed == ParseRecordResult.STOP_PARSING) {
+						System.out.println("Line " + curLine + ": Record was not parsed by underlying parseRecord() implementation.");
+						return null;
+					} else {
+						if (recordParsed == ParseRecordResult.CONTINUE_PARSING) {
+							System.out.println("Line " + curLine + ": NON-record encountered by underlying parseRecord() implementation, continue parsing.");
+							continue;
+						} else if (recordParsed == ParseRecordResult.RECORD_PARSED) {
+							System.out.println("Line " + curLine + ": New record parsed by underlying parseRecord() implementation.");
+						}
+					}
 				}
+
 				String[] row = output.rowParsed();
+				/*if (!headersFound) {
+					System.out.println("HEADERS NOT FOUND at or beyond line " + curLine);
+					if (row == null) {
+						System.out.println("output.rowParsed() == null line " + curLine);
+					} else {
+						System.out.println("output.rowParsed() row.length: " + row.length + " line " + curLine);
+						for (int k = 0; k < row.length; k++) {
+							System.out.println(" * row " + k + ": " + row[k]);
+						}
+					}
+				} else {
+					System.out.println("HEADERS FOUND at or beyond line " + curLine);
+				}*/
 				if (row != null) {
+					for (int k = 0; k < row.length; k++) {
+						if (row[k] != null) {
+							for (int l = 0; l < row[k].length(); l++) {
+								currentLine.add(row[k].charAt(l));
+							}
+						}
+					}
+
 					if (recordsToRead >= 0 && context.currentRecord() >= recordsToRead) {
 						context.stop();
 						if (recordsToRead == 0L) {
@@ -593,20 +697,55 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 					}
 					if (processor != NoopProcessor.instance) {
 						rowProcessed(row);
+						//System.out.println("ROW PROCESSED " + curLine);
 					}
+
+					//System.out.println("AbstractProcessor return row line 672");
 					return row;
 				} else if (extractingHeaders) {
+					curLine = input.lineCount();
+					System.out.println("AbstractParser got a header in line " + curLine + ": " + input.previousLine());
 					return null;
+				} else {
+					/*System.out.println("AbstractParser got a non-row in line " + curLine + ": " + input.previousLine());
+
+					if (prevLine.isEmpty()) {
+						System.out.println("Empty line " + curLine);
+					} else {
+						String strippedLine = prevLine.replaceFirst("^\\s*", "");
+						// System.out.println("Stripped line " + curLine + ": " + strippedLine);
+						if (strippedLine.isEmpty()) {
+							System.out.println("Empty line (stripped) " + curLine);
+						} else {
+							if (strippedLine.length() > 0) {
+								if (strippedLine.charAt(0) == comment) {
+									System.out.println("Comment line " + curLine);
+								}
+							}
+						}
+					}*/
 				}
 			}
 
 			if (output.column != 0) {
+				// System.out.println("AbstractParser return line 696");
 				return output.rowParsed();
 			}
 			stopParsing();
 			return null;
 		} catch (EOFException ex) {
 			String[] row = handleEOF();
+
+			if (row != null) {
+				for (int k = 0; k < row.length; k++) {
+					if (row[k] != null) {
+						for (int l = 0; l < row[k].length(); l++) {
+							currentLine.add(row[k].charAt(l));
+						}
+					}
+				}
+			}
+
 			if (output.pendingRecords.isEmpty()) {
 				stopParsing();
 			}
@@ -668,6 +807,7 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 			return null;
 		}
 		lineReader.setLine(line);
+
 		if (context == null || context.isStopped()) {
 			beginParsing(lineReader);
 		} else {
@@ -1246,6 +1386,27 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 	}
 
 	/**
+	 * Returns all preamble lines collected by the parser so far.
+	 * An empty map will be returned if {@link CommonParserSettings#isPreambleLineCollectionEnabled()} evaluates to {@code false}.
+	 *
+	 * @return a map containing the line numbers and preamble lines found in each.
+	 */
+	final Map<Long, String> getPreambleLines() {
+		return preambleLines;
+	}
+
+	/**
+	 * Returns the last preamble line found in the input.
+	 * {@code null} will be returned if {@link CommonParserSettings#isPreambleLineCollectionEnabled()} is evaluated to {@code false}.
+	 *
+	 * @return the last preamble line found in the input.
+	 */
+	final String getLastPreambleLine() {
+		return lastPreambleLine;
+	}
+
+
+	/**
 	 * Returns the headers <b>parsed</b> from the input, if and only if {@link CommonParserSettings#headerExtractionEnabled} is {@code true}.
 	 * The result of this method won't return the list of headers manually set by the user in {@link CommonParserSettings#getHeaders()}.
 	 *
@@ -1488,6 +1649,10 @@ public abstract class AbstractParser<T extends CommonParserSettings<?>> {
 				parser.beginParsing(input);
 			}
 		};
+	}
+
+	public void printParsingStats() {
+
 	}
 
 }

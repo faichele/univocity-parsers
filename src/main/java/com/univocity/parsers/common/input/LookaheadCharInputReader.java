@@ -166,10 +166,24 @@ public class LookaheadCharInputReader implements CharInputReader {
 	@Override
 	public char nextChar() {
 		if (start >= length) {
-			return reader.nextChar();
+			char ch = reader.nextChar();
+			System.out.println("nextChar() in LookaheadCharInputReader: " + ch);
+			return ch;
 		} else {
-			return lookahead[start++];
+			char ch = lookahead[start++];
+			System.out.println("nextChar() in LookaheadCharInputReader: " + ch);
+			return ch;
 		}
+	}
+
+	@Override
+	public String currentLine() {
+		return null;
+	}
+
+	@Override
+	public String previousLine() {
+		return null;
 	}
 
 	@Override
@@ -245,7 +259,7 @@ public class LookaheadCharInputReader implements CharInputReader {
 	}
 
 	@Override
-	public boolean skipString(char ch, char stop) {
+	public String skipString(char ch, char stop) {
 		return reader.skipString(ch, stop);
 	}
 

@@ -140,6 +140,22 @@ public interface ParsingContext extends Context {
 	String lastComment();
 
 	/**
+	 * Returns all preamble lines collected by the parser so far.
+	 * An empty map will be returned if {@link CommonParserSettings#isPreambleLineCollectionEnabled()} evaluates to {@code false}.
+	 *
+	 * @return a map containing the line numbers and preamble line found in each.
+	 */
+	Map<Long, String> preambleLines();
+
+	/**
+	 * Returns the last preamble line found in the input.
+	 * {@code null} will be returned if {@link CommonParserSettings#isPreambleLineCollectionEnabled()} is evaluated to {@code false}.
+	 *
+	 * @return the last preamble found in the input.
+	 */
+	String lastPreambleLine();
+
+	/**
 	 * Returns the line separator characters used to separate individual records when parsing. This could be the line
 	 * separator defined in the {@link Format#getLineSeparator()} configuration, or the line separator sequence
 	 * identified automatically when {@link CommonParserSettings#isLineSeparatorDetectionEnabled()} evaluates to {@code true}.

@@ -76,6 +76,8 @@ public abstract class CommonSettings<F extends Format> implements Cloneable {
 	private int errorContentLength = -1;
 	private boolean skipBitsAsWhitespace = true;
 
+	private boolean preambleLineCollectionEnabled = true;
+
 	private String[] headers;
 	Class<?> headerSourceClass;
 
@@ -445,6 +447,12 @@ public abstract class CommonSettings<F extends Format> implements Cloneable {
 	 */
 	FieldSelector getFieldSelector() {
 		return this.fieldSelector;
+	}
+
+	public final boolean isPreambleLineCollectionEnabled() { return preambleLineCollectionEnabled; }
+
+	public final void setPreambleLineCollectionEnabled(boolean enablePreambleLineCollection) {
+		preambleLineCollectionEnabled = enablePreambleLineCollection;
 	}
 
 	/**

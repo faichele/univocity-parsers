@@ -1,3 +1,7 @@
+essential_dos.csv Key_1:Value_1 2 3
+essential_dos.csv Key_2:Value_2
+essential_dos.csv Key_3:Value as string
+essential_dos.csv Key_4:Value 4.55
 This line and the following should be skipped. The third is ignored automatically because it is blank
 
 

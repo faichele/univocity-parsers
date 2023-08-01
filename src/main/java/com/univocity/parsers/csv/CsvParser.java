@@ -19,7 +19,9 @@ import com.univocity.parsers.common.*;
 import com.univocity.parsers.common.input.EOFException;
 import com.univocity.parsers.common.input.*;
 
+// import javax.swing.text.html.parser.Parser;
 import java.io.*;
+import java.util.*;
 
 import static com.univocity.parsers.csv.UnescapedQuoteHandling.*;
 
@@ -61,6 +63,9 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 	private int match = 0;
 	private int formatDetectorRowSampleCount;
 
+	private Map<Long, Map<Long, String>> csvPotentialRecordLines;
+	private Map<Long, Map<Long, String>> csvParsedRecordLines;
+
 	/**
 	 * The CsvParser supports all settings provided by {@link CsvParserSettings}, and requires this configuration to be properly initialized.
 	 *
@@ -84,6 +89,9 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 
 		whitespaceAppender = new ExpandingCharAppender(10, "", whitespaceRangeStart);
 
+		csvPotentialRecordLines = new TreeMap<Long, Map<Long, String>>();
+		csvParsedRecordLines = new TreeMap<Long, Map<Long, String>>();
+
 		this.quoteHandling = settings.getUnescapedQuoteHandling();
 		if (quoteHandling == null) {
 			if (parseUnescapedQuotes) {
@@ -104,26 +112,77 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 
 
 	@Override
-	protected final void parseRecord() {
+	protected final ParseRecordResult parseRecord() {
+		System.out.println("input.lineCount() = " + input.lineCount());
+		boolean readingFirstLine = (input.lineCount() == 0);
+
+		String currentLine = "";
+		if (readingFirstLine) {
+			String firstLine = input.skipString(input.getChar(), input.getLineSeparator()[0]);
+			if (firstLine.length() > 0) {
+				firstLine = firstLine.substring(0, firstLine.length() - 1);
+			}
+			System.out.println("Read first line: " + firstLine);
+			currentLine = firstLine;
+		} else {
+			currentLine = input.previousLine();
+		}
+
+		long parserLineCount = input.lineCount();
+		System.out.println("CsvParser parseRecord() Line " + parserLineCount + ": " + currentLine);
 		if (multiDelimiter == null) {
-			parseSingleDelimiterRecord();
+			int delimiterIndex = currentLine.indexOf(delimiter);
+			if (delimiterIndex == -1) {
+				/*if (readingFirstLine)
+					return ParseRecordResult.CONTINUE_PARSING;
+				else
+					return ParseRecordResult.RECORD_PARSED;*/
+				String skippedText = input.skipString(input.getChar(), input.getLineSeparator()[0]);
+				System.out.println("Skipped non-record line: " + skippedText);
+				return ParseRecordResult.CONTINUE_PARSING;
+			} else {
+				long delimiterCount = currentLine.chars().filter(ch -> ch == delimiter).count();
+				if (!csvPotentialRecordLines.containsKey(delimiterCount)) {
+					System.out.println("Adding new delimiter count entry (potential records): " + delimiterCount);
+					csvPotentialRecordLines.put(delimiterCount, new TreeMap<Long, String>());
+				}
+
+				csvPotentialRecordLines.get(delimiterCount).put(parserLineCount, currentLine);
+			}
+
+			ParseRecordResult singleRecordResult = parseSingleDelimiterRecord();
+			return singleRecordResult;
 		} else {
 			parseMultiDelimiterRecord();
 		}
+
+		return ParseRecordResult.CONTINUE_PARSING;
 	}
 
-	private final void parseSingleDelimiterRecord() {
+	private final ParseRecordResult parseSingleDelimiterRecord() {
+		long valuesParsed = 0;
 		if (ch <= ' ' && ignoreLeadingWhitespace && whitespaceRangeStart < ch) {
 			ch = input.skipWhitespace(ch, delimiter, quote);
+			currentLine.add(ch);
 		}
 
 		while (ch != newLine) {
+			currentLine.add(ch);
+
 			if (ch <= ' ' && ignoreLeadingWhitespace && whitespaceRangeStart < ch) {
 				ch = input.skipWhitespace(ch, delimiter, quote);
+				currentLine.add(ch);
 			}
 
 			if (ch == delimiter || ch == newLine) {
 				output.emptyParsed();
+
+				if (ch == newLine) {
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (134): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+					currentLine.clear();
+				}
 			} else {
 				unescaped = false;
 				prev = '\0';
@@ -134,43 +193,91 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 						String value = input.getQuotedString(quote, quoteEscape, escapeEscape, maxColumnLength, delimiter, newLine, keepQuotes, keepEscape, trimQuotedLeading, trimQuotedTrailing);
 						if (value != null) {
 							output.valueParsed(value == "" ? emptyValue : value);
+							System.out.println("CSV parser -- value parsed (line 196): \"" + value + "\"");
+							valuesParsed++;
+
 							input.enableNormalizeLineEndings(true);
+
+							for (int l = 0; l < value.length(); l++) {
+								currentLine.add(value.charAt(l));
+							}
+
 							try {
 								ch = input.nextChar();
+								currentLine.add(ch);
+
 								if (ch == delimiter) {
 									try {
 										ch = input.nextChar();
+										currentLine.add(ch);
+
 										if (ch == newLine) {
 											output.emptyParsed();
+											String previousLine = input.previousLine();
+											System.out.println("Line parsed in CsvParser (167): " + currentLine.toString() +
+													" -- prev. line from input: " + previousLine);
+
+											currentLine.clear();
 										}
 									} catch (EOFException e) {
 										output.emptyParsed();
-										return;
+
+										String previousLine = input.previousLine();
+										System.out.println("Line parsed in CsvParser (173): " + currentLine.toString() +
+												" -- prev. line from input: " + previousLine);
+										currentLine.clear();
+
+										return ParseRecordResult.STOP_PARSING;
 									}
 								}
 							} catch (EOFException e) {
-								return;
+								return ParseRecordResult.STOP_PARSING;
 							}
+							System.out.println("CSVParser BailOut line 188");
 							continue;
 						}
 					} else if (len == -1 && input.skipQuotedString(quote, quoteEscape, delimiter, newLine)) {
 						output.valueParsed();
+						System.out.println("CSV parser -- quoted value parsed (line 242)");
+						valuesParsed++;
+
 						try {
 							ch = input.nextChar();
+							currentLine.add(ch);
+
 							if (ch == delimiter) {
 								try {
 									ch = input.nextChar();
+									currentLine.add(ch);
+
 									if (ch == newLine) {
 										output.emptyParsed();
+
+										String previousLine = input.previousLine();
+										System.out.println("Line parsed in CsvParser (205): " + currentLine.toString() +
+												" -- prev. line from input: " + previousLine);
+										currentLine.clear();
 									}
 								} catch (EOFException e) {
 									output.emptyParsed();
-									return;
+
+									String previousLine = input.previousLine();
+									System.out.println("Line parsed in CsvParser (213): " + currentLine.toString() +
+											" -- prev. line from input: " + previousLine);
+									currentLine.clear();
+
+									return ParseRecordResult.STOP_PARSING;
 								}
 							}
 						} catch (EOFException e) {
-							return;
+							String previousLine = input.previousLine();
+							System.out.println("Line parsed in CsvParser (222): " + currentLine.toString() +
+									" -- prev. line from input: " + previousLine);
+							currentLine.clear();
+
+							return ParseRecordResult.STOP_PARSING;
 						}
+						System.out.println("CSVParser BailOut line 228");
 						continue;
 					}
 					output.trim = trimQuotedTrailing;
@@ -178,6 +285,9 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 					input.enableNormalizeLineEndings(true);
 					if (!(unescaped && quoteHandling == BACK_TO_DELIMITER && output.appender.length() == 0)) {
 						output.valueParsed();
+						System.out.println("CSV parser -- quoted value parsed (line 288)");
+
+						valuesParsed++;
 					}
 				} else if (doNotEscapeUnquotedValues) {
 					String value = null;
@@ -187,42 +297,88 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 					}
 					if (value != null) {
 						output.valueParsed(value);
+						System.out.println("CSV parser -- value parsed (line 300): " + value);
+						valuesParsed++;
+
+						for (int l = 0; l < value.length(); l++) {
+							currentLine.add(value.charAt(l));
+						}
+
 						ch = input.getChar();
+						currentLine.add(ch);
 					} else {
 						if (len != -1) {
 							output.trim = ignoreTrailingWhitespace;
+							int oldPos = output.appender.length() + output.appender.whitespaceCount();
 							ch = output.appender.appendUntil(ch, input, delimiter, newLine);
-						} else {
-							if (input.skipString(ch, delimiter)) {
-								ch = input.getChar();
-							} else {
-								ch = output.appender.appendUntil(ch, input, delimiter, newLine);
+							int newPos = output.appender.length() + output.appender.whitespaceCount();
+							for (int k = 0; k < newPos - oldPos; k++) {
+								currentLine.add(output.appender.charAt(oldPos + k));
 							}
+							currentLine.add(ch);
+						} else {
+							int oldPos = output.appender.length() + output.appender.whitespaceCount();
+							ch = output.appender.appendUntil(ch, input, delimiter, newLine);
+							int newPos = output.appender.length() + output.appender.whitespaceCount();
+							for (int k = 0; k < newPos - oldPos; k++) {
+								currentLine.add(output.appender.charAt(oldPos + k));
+							}
+							currentLine.add(ch);
 						}
 						output.valueParsed();
+						System.out.println("CSV parser -- quoted value parsed (line 329)");
+						valuesParsed++;
 					}
 				} else {
 					output.trim = ignoreTrailingWhitespace;
 					parseValueProcessingEscape();
 					output.valueParsed();
+					System.out.println("CSV parser -- quoted value parsed (line 336)");
+					valuesParsed++;
 				}
 			}
 			if (ch != newLine) {
 				ch = input.nextChar();
+				currentLine.add(ch);
+
 				if (ch == newLine) {
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (284): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+					currentLine.clear();
+
 					output.emptyParsed();
 				}
 			}
 		}
+
+		System.out.println("Line " + input.currentLine() + ": Values parsed from CSV record = " + valuesParsed);
+		if (!csvParsedRecordLines.containsKey(valuesParsed)) {
+			System.out.println("Adding new delimiter count entry (parsed records): " + valuesParsed);
+			csvParsedRecordLines.put(valuesParsed, new TreeMap<Long, String>());
+		}
+
+		csvParsedRecordLines.get(valuesParsed).put(input.lineCount(), input.previousLine());
+
+		return ParseRecordResult.RECORD_PARSED;
 	}
 
 	private void skipValue() {
 		output.appender.reset();
 		output.appender = NoopCharAppender.getInstance();
 		if (multiDelimiter == null) {
+			// ch = NoopCharAppender.getInstance().appendUntil(ch, input, delimiter, newLine);
+
+			int oldPos = NoopCharAppender.getInstance().length() + NoopCharAppender.getInstance().whitespaceCount();
 			ch = NoopCharAppender.getInstance().appendUntil(ch, input, delimiter, newLine);
+			int newPos = NoopCharAppender.getInstance().length() + NoopCharAppender.getInstance().whitespaceCount();
+			for (int k = 0; k < newPos - oldPos; k++) {
+				currentLine.add(NoopCharAppender.getInstance().charAt(oldPos + k));
+			}
 		} else {
 			for (; match < multiDelimiter.length && ch != newLine; ch = input.nextChar()) {
+				currentLine.add(ch);
+
 				if (multiDelimiter[match] == ch) {
 					match++;
 				} else {
@@ -249,6 +405,8 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 			case STOP_AT_CLOSING_QUOTE:
 			case STOP_AT_DELIMITER:
 				output.appender.append(quote);
+				currentLine.add(quote);
+
 				prev = ch;
 				parseValueProcessingEscape();
 				break;
@@ -282,9 +440,20 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 						value += quote;
 					}
 					output.valueParsed(value);
+
+					for (int k = 0; k < value.length(); k++) {
+						currentLine.add(value.charAt(k));
+					}
+
 					if (output.appender.charAt(pos) == newLine) {
 						output.pendingRecords.add(output.rowParsed());
 						output.appender.remove(0, pos + 1);
+
+						String previousLine = input.previousLine();
+						System.out.println("Line parsed in CsvParser (381): " + currentLine.toString() +
+								" -- prev. line from input: " + previousLine);
+						currentLine.clear();
+
 						continue;
 					}
 					if (multiDelimiter == null) {
@@ -295,8 +464,18 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 				}
 				if (keepQuotes && input.lastIndexOf(quote) > lastPos) {
 					output.appender.append(quote);
+					currentLine.add(quote);
 				}
 				output.appender.append(ch);
+				currentLine.add(ch);
+
+				if (ch == newLine) {
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (402): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+					currentLine.clear();
+				}
+
 				prev = '\0';
 				if (multiDelimiter == null) {
 					parseQuotedValue();
@@ -307,7 +486,16 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 			case STOP_AT_CLOSING_QUOTE:
 			case STOP_AT_DELIMITER:
 				output.appender.append(quote);
+				currentLine.add(quote);
 				output.appender.append(ch);
+				currentLine.add(ch);
+
+				if (ch == newLine) {
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (423): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+				}
+
 				prev = ch;
 				if (multiDelimiter == null) {
 					parseQuotedValue();
@@ -325,21 +513,29 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 		if (ch == quoteEscape && prev == escapeEscape && escapeEscape != '\0') {
 			if (keepEscape) {
 				output.appender.append(escapeEscape);
+				currentLine.add(escapeEscape);
 			}
 			output.appender.append(quoteEscape);
+			currentLine.add(quoteEscape);
+
 			ch = '\0';
 		} else if (prev == quoteEscape) {
 			if (ch == quote) {
 				if (keepEscape) {
 					output.appender.append(quoteEscape);
+					currentLine.add(quoteEscape);
 				}
 				output.appender.append(quote);
+				currentLine.add(quote);
+
 				ch = '\0';
 			} else {
 				output.appender.append(prev);
+				currentLine.add(prev);
 			}
 		} else if (ch == quote && prev == quote) {
 			output.appender.append(quote);
+			currentLine.add(quote);
 		} else if (prev == quote) { //unescaped quote detected
 			handleUnescapedQuoteInValue();
 		}
@@ -358,33 +554,59 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 			}
 			prev = ch;
 			ch = input.nextChar();
+			currentLine.add(ch);
+
+			if (ch == newLine) {
+				String previousLine = input.previousLine();
+				System.out.println("Line parsed in CsvParser (489): " + currentLine.toString() +
+						" -- prev. line from input: " + previousLine);
+			}
 		}
 	}
 
-	private void parseQuotedValue() {
+	private ParseRecordResult parseQuotedValue() {
 		if (prev != '\0' && parseUnescapedQuotesUntilDelimiter) {
 			if (quoteHandling == SKIP_VALUE) {
 				skipValue();
-				return;
+				return ParseRecordResult.CONTINUE_PARSING;
 			}
 			if (!keepQuotes) {
-				output.appender.prepend(quote);
+				output.appender.prepend(quote); // TODO: prepend?
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
+
 			output.trim = ignoreTrailingWhitespace;
+
+			int oldPos = output.appender.length() + output.appender.whitespaceCount();
 			ch = output.appender.appendUntil(ch, input, delimiter, newLine);
+			int newPos = output.appender.length() + output.appender.whitespaceCount();
+			for (int k = 0; k < newPos - oldPos; k++) {
+				currentLine.add(NoopCharAppender.getInstance().charAt(oldPos + k));
+			}
 		} else {
 			if (keepQuotes && prev == '\0') {
 				output.appender.append(quote);
+				currentLine.add(quote);
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
 
 			if (trimQuotedLeading && ch <= ' ' && output.appender.length() == 0) {
-				while ((ch = input.nextChar()) <= ' ') ;
+				while ((ch = input.nextChar()) <= ' ') {
+					currentLine.add(ch);
+				} //;
 			}
 
 			while (true) {
 				if (prev == quote && (ch <= ' ' && whitespaceRangeStart < ch || ch == delimiter || ch == newLine)) {
+					if (ch == newLine) {
+						String previousLine = input.previousLine();
+						System.out.println("Line parsed in CsvParser (533): " + currentLine.toString() +
+								" -- prev. line from input: " + previousLine);
+						currentLine.clear();
+					}
+
 					break;
 				}
 
@@ -394,24 +616,40 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 							if (quoteHandling == SKIP_VALUE) {
 								break;
 							} else {
-								return;
+								return ParseRecordResult.CONTINUE_PARSING;
 							}
 						} else {
-							return;
+							return ParseRecordResult.STOP_PARSING;
 						}
 					}
 					if (prev == quoteEscape && quoteEscape != '\0') {
 						output.appender.append(quoteEscape);
+						currentLine.add(quoteEscape);
 					}
+					int oldPos = output.appender.length() + output.appender.whitespaceCount();
 					ch = output.appender.appendUntil(ch, input, quote, quoteEscape, escapeEscape);
+					int newPos = output.appender.length() + output.appender.whitespaceCount();
+					for (int k = 0; k < newPos - oldPos; k++) {
+						currentLine.add(output.appender.charAt(oldPos + k));
+					}
+
 					prev = ch;
 					ch = input.nextChar();
+					currentLine.add(ch);
 				} else {
 					processQuoteEscape();
 					prev = ch;
 					ch = input.nextChar();
+					currentLine.add(ch);
 					if (unescaped && (ch == delimiter || ch == newLine)) {
-						return;
+						if (ch == newLine) {
+							String previousLine = input.previousLine();
+							System.out.println("Line parsed in CsvParser (574): " + currentLine.toString() +
+									" -- prev. line from input: " + previousLine);
+							currentLine.clear();
+						}
+
+						return ParseRecordResult.RECORD_PARSED;
 					}
 				}
 			}
@@ -423,12 +661,20 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 					//saves whitespaces after value
 					whitespaceAppender.append(ch);
 					ch = input.nextChar();
+					currentLine.add(ch);
+
 					//found a new line, go to next record.
 					if (ch == newLine) {
+						String previousLine = input.previousLine();
+						System.out.println("Line parsed in CsvParser (597): " + currentLine.toString() +
+								" -- prev. line from input: " + previousLine);
+						currentLine.clear();
+
 						if (keepQuotes) {
 							output.appender.append(quote);
+							currentLine.add(quote);
 						}
-						return;
+						return ParseRecordResult.CONTINUE_PARSING;
 					}
 				} while (ch <= ' ' && whitespaceRangeStart < ch && ch != delimiter);
 
@@ -437,28 +683,35 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 					if (output.appender instanceof DefaultCharAppender) {
 						//puts the quote before whitespaces back, then restores the whitespaces
 						output.appender.append(quote);
+						currentLine.add(quote);
+
 						((DefaultCharAppender) output.appender).append(whitespaceAppender);
 					}
 					//the next character is not the escape character, put it there
 					if (parseUnescapedQuotesUntilDelimiter || ch != quote && ch != quoteEscape) {
 						output.appender.append(ch);
+						currentLine.add(ch);
 					}
 
 					//sets this character as the previous character (may be escaping)
 					//calls recursively to keep parsing potentially quoted content
 					prev = ch;
-					parseQuotedValue();
+					return parseQuotedValue();
 				} else if (keepQuotes) {
 					output.appender.append(quote);
+					currentLine.add(quote);
 				}
 			} else if (keepQuotes) {
 				output.appender.append(quote);
+				currentLine.add(quote);
 			}
 
 			if (ch != delimiter && ch != newLine) {
 				throw new TextParsingException(context, "Unexpected character '" + ch + "' following quoted value of CSV field. Expecting '" + delimiter + "'. Cannot parse CSV input.");
 			}
 		}
+
+		return ParseRecordResult.CONTINUE_PARSING;
 	}
 
 	@Override
@@ -518,16 +771,18 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 			if (prev == quote) {
 				if (keepQuotes) {
 					output.appender.append(quote);
+					currentLine.add(quote);
 				}
 				return true;
 			} else {
 				if (!unescaped) {
 					output.appender.append(quote);
+					currentLine.add(quote);
 				}
 			}
 		}
 		boolean out = prev != '\0' && ch != delimiter && ch != newLine && ch != comment;
-		ch = prev = '\0';
+		ch = prev = '\0'; // TODO: newLine in consumeValueOnEOF?
 		if (match > 0) {
 			saveMatchingCharacters();
 			return true;
@@ -556,12 +811,22 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 	}
 
 	private void skipWhitespace() {
-		while (ch <= ' ' && match < multiDelimiter.length && ch != newLine && ch != quote && whitespaceRangeStart < ch) {
+		while (ch <= ' ' && match < multiDelimiter.length && ch != quote && whitespaceRangeStart < ch) {
+			if (ch == newLine) {
+				String previousLine = input.previousLine();
+				System.out.println("Line parsed in CsvParser (743): " + currentLine.toString() +
+						" -- prev. line from input: " + previousLine);
+				currentLine.add(ch);
+				break;
+			}
 			ch = input.nextChar();
+			currentLine.add(ch);
+
 			if (multiDelimiter[match] == ch) {
 				if (matchDelimiter()) {
 					output.emptyParsed();
 					ch = input.nextChar();
+					currentLine.add(ch);
 				}
 			}
 		}
@@ -573,6 +838,12 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 		if (match > 0) {
 			if (match < multiDelimiter.length) {
 				output.appender.append(multiDelimiter, 0, match);
+
+				for (int k = 0; k < match; k++) {
+					for (int l = 0; l < multiDelimiter.length; l++) {
+						currentLine.add(multiDelimiter[l]);
+					}
+				}
 			}
 			match = 0;
 		}
@@ -585,6 +856,7 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 				break;
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
 		}
 
 		if (multiDelimiter.length == match) {
@@ -606,6 +878,7 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 				break;
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
 		}
 
 		if (multiDelimiter.length == match) {
@@ -616,7 +889,7 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 		return false;
 	}
 
-	private void parseMultiDelimiterRecord() {
+	private ParseRecordResult parseMultiDelimiterRecord() {
 		if (ch <= ' ' && ignoreLeadingWhitespace && whitespaceRangeStart < ch) {
 			skipWhitespace();
 		}
@@ -627,6 +900,13 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 			}
 
 			if (ch == newLine || matchDelimiter()) {
+				if (ch == newLine) {
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (782): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+					currentLine.clear();
+				}
+
 				output.emptyParsed();
 			} else {
 				unescaped = false;
@@ -653,11 +933,20 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 			}
 			if (ch != newLine) {
 				ch = input.nextChar();
+				currentLine.add(ch);
+
 				if (ch == newLine) {
 					output.emptyParsed();
+
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (868): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+					currentLine.clear();
 				}
 			}
 		}
+
+		return ParseRecordResult.CONTINUE_PARSING;
 	}
 
 	private void appendUntilMultiDelimiter() {
@@ -673,22 +962,26 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 					continue;
 				}
 				output.appender.append(ch);
+				currentLine.add(ch);
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
 		}
 		saveMatchingCharacters();
 	}
 
-	private void parseQuotedValueMultiDelimiter() {
+	private ParseRecordResult parseQuotedValueMultiDelimiter() {
 		if (prev != '\0' && parseUnescapedQuotesUntilDelimiter) {
 			if (quoteHandling == SKIP_VALUE) {
 				skipValue();
-				return;
+				return ParseRecordResult.CONTINUE_PARSING;
 			}
 			if (!keepQuotes) {
 				output.appender.prepend(quote);
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
+
 			output.trim = ignoreTrailingWhitespace;
 			appendUntilMultiDelimiter();
 		} else {
@@ -696,20 +989,31 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 				output.appender.append(quote);
 			}
 			ch = input.nextChar();
+			currentLine.add(ch);
 
 			if (trimQuotedLeading && ch <= ' ' && output.appender.length() == 0) {
-				while ((ch = input.nextChar()) <= ' ') ;
+				while ((ch = input.nextChar()) <= ' ') {
+					currentLine.add(ch);
+				} //;
 			}
 
 			while (true) {
 				if (prev == quote && (ch <= ' ' && whitespaceRangeStart < ch || ch == newLine)) {
+					if (ch == newLine) {
+						String previousLine = input.previousLine();
+						System.out.println("Line parsed in CsvParser (928): " + currentLine.toString() +
+								" -- prev. line from input: " + previousLine);
+						currentLine.clear();
+					}
+
 					break;
 				}
 				if (prev == quote && matchDelimiter()) {
 					if (keepQuotes) {
 						output.appender.append(quote);
+						currentLine.add(quote);
 					}
-					return;
+					return ParseRecordResult.CONTINUE_PARSING;
 				}
 
 				if (ch != quote && ch != quoteEscape) {
@@ -718,24 +1022,40 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 							if (quoteHandling == SKIP_VALUE) {
 								break;
 							} else {
-								return;
+								return ParseRecordResult.STOP_PARSING;
 							}
 						} else {
-							return;
+							return ParseRecordResult.STOP_PARSING;
 						}
 					}
 					if (prev == quoteEscape && quoteEscape != '\0') {
 						output.appender.append(quoteEscape);
+						currentLine.add(quoteEscape);
 					}
+
+					int oldPos = output.appender.length() + output.appender.whitespaceCount();
 					ch = output.appender.appendUntil(ch, input, quote, quoteEscape, escapeEscape);
+					int newPos = output.appender.length() + output.appender.whitespaceCount();
+					for (int k = 0; k < newPos - oldPos; k++) {
+						currentLine.add(NoopCharAppender.getInstance().charAt(oldPos + k));
+					}
+
 					prev = ch;
 					ch = input.nextChar();
+					currentLine.add(ch);
 				} else {
 					processQuoteEscape();
 					prev = ch;
 					ch = input.nextChar();
+					currentLine.add(ch);
+
 					if (unescaped && (ch == newLine || matchDelimiter())) {
-						return;
+						String previousLine = input.previousLine();
+						System.out.println("Line parsed in CsvParser (978): " + currentLine.toString() +
+								" -- prev. line from input: " + previousLine);
+						currentLine.clear();
+
+						return ParseRecordResult.CONTINUE_PARSING;
 					}
 				}
 			}
@@ -748,15 +1068,24 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 				//saves whitespaces after value
 				whitespaceAppender.append(ch);
 				ch = input.nextChar();
+				currentLine.add(ch);
+
 				//found a new line, go to next record.
 				if (ch == newLine) {
 					if (keepQuotes) {
 						output.appender.append(quote);
+						currentLine.add(quote);
 					}
-					return;
+
+					String previousLine = input.previousLine();
+					System.out.println("Line parsed in CsvParser (1005): " + currentLine.toString() +
+							" -- prev. line from input: " + previousLine);
+					currentLine.clear();
+
+					return ParseRecordResult.CONTINUE_PARSING;
 				}
 				if (matchDelimiterAfterQuote()) {
-					return;
+					return ParseRecordResult.CONTINUE_PARSING;
 				}
 			} while (ch <= ' ' && whitespaceRangeStart < ch);
 
@@ -765,24 +1094,30 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 				if (output.appender instanceof DefaultCharAppender) {
 					//puts the quote before whitespaces back, then restores the whitespaces
 					output.appender.append(quote);
+					currentLine.add(quote);
+
 					((DefaultCharAppender) output.appender).append(whitespaceAppender);
 				}
 				//the next character is not the escape character, put it there
 				if (parseUnescapedQuotesUntilDelimiter || ch != quote && ch != quoteEscape) {
 					output.appender.append(ch);
+					currentLine.add(ch);
 				}
 
 				//sets this character as the previous character (may be escaping)
 				//calls recursively to keep parsing potentially quoted content
 				prev = ch;
-				parseQuotedValue();
+				return parseQuotedValue();
 			} else if (keepQuotes) {
 				output.appender.append(quote);
+				currentLine.add(quote);
 			}
 		} else if (keepQuotes && (!unescaped || quoteHandling == STOP_AT_CLOSING_QUOTE)) {
 			output.appender.append(quote);
+			currentLine.add(quote);
 		}
 
+		return ParseRecordResult.CONTINUE_PARSING;
 	}
 
 	private void parseValueProcessingEscapeMultiDelimiter() {
@@ -793,11 +1128,42 @@ public final class CsvParser extends AbstractParser<CsvParserSettings> {
 					return;
 				}
 				output.appender.append(ch);
+				currentLine.add(ch);
 			} else {
 				processQuoteEscape();
 			}
 			prev = ch;
 			ch = input.nextChar();
+			currentLine.add(ch);
+		}
+
+		String previousLine = input.previousLine();
+		System.out.println("Line parsed in CsvParser (782): " + currentLine.toString() +
+				" -- prev. line from input: " + previousLine);
+		currentLine.clear();
+	}
+
+	public void printParsingStats() {
+		System.out.println("================ PARSING STATS ================");
+		System.out.println("Total lines parsed: " + input.lineCount());
+		System.out.println("Distinct Potential CSV record counts encountered: " + csvPotentialRecordLines.keySet().size());
+		System.out.println("Distinct Potential CSV records count: ");
+		for (Long key : csvPotentialRecordLines.keySet()) {
+			Map<Long, String> records = csvPotentialRecordLines.get(key);
+			System.out.println(" * Potential value count " + key + ": " + records.size() + " lines.");
+			for (Long lineKey: records.keySet()) {
+				System.out.println("    - Line " + lineKey + ": " + records.get(lineKey));
+			}
+		}
+
+		System.out.println("Distinct Parsed CSV record counts encountered: " + csvPotentialRecordLines.keySet().size());
+		System.out.println("Distinct Parsed CSV records by separator count: ");
+		for (Long key : csvParsedRecordLines.keySet()) {
+			Map<Long, String> records = csvParsedRecordLines.get(key);
+			System.out.println(" * Parsed value count " + key + ": " + records.size() + " lines.");
+			for (Long lineKey: records.keySet()) {
+				System.out.println("    - Line " + lineKey + ": " + records.get(lineKey));
+			}
 		}
 	}
 }

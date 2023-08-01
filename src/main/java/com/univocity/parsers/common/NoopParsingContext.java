@@ -92,6 +92,17 @@ class NoopParsingContext implements ParsingContext {
 	}
 
 	@Override
+	public Map<Long, String> preambleLines() {
+		return Collections.emptyMap();
+	}
+
+	@Override
+	public String lastPreambleLine() {
+		return null;
+	}
+
+
+	@Override
 	public char[] lineSeparator() {
 		return Format.getSystemLineSeparator();
 	}

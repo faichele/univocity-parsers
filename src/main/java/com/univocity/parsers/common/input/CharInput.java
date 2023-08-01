@@ -39,4 +39,7 @@ public interface CharInput {
 	 */
 	char getChar();
 
+	String currentLine();
+
+	String previousLine();
 }

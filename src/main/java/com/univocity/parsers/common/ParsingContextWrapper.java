@@ -71,6 +71,17 @@ public class ParsingContextWrapper extends ContextWrapper<ParsingContext> implem
 	}
 
 	@Override
+	public Map<Long, String> preambleLines() {
+		return context.preambleLines();
+	}
+
+	@Override
+	public String lastPreambleLine() {
+		return context.lastPreambleLine();
+	}
+
+
+	@Override
 	public String[] parsedHeaders() {
 		return context.parsedHeaders();
 	}
